@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://github.com/jepsen-io/maelstrom/releases/tag/v0.2.3
+HostUrl=https://objects.githubusercontent.com/github-production-release-asset-2e65be/88094811/124bf9b7-d399-425a-b41c-70e7535a2049?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIWNJYAX4CSVEH53A%2F20231108%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20231108T050814Z&X-Amz-Expires=300&X-Amz-Signature=3c2dde0f203ecf6b87791a1347ee5d06805db76925f4d15a2a9745d9f88df0e0&X-Amz-SignedHeaders=host&actor_id=115664954&key_id=0&repo_id=88094811&response-content-disposition=attachment%3B%20filename%3Dmaelstrom.tar.bz2&response-content-type=application%2Foctet-stream
