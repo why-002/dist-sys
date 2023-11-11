@@ -20,5 +20,5 @@ cd maelstrom
 
 cd maelstrom
 
-./maelstrom test -w unique-ids --bin --bin ~/dist-sys/target/debug/unique-ids --time-limit 30 --rate 1000 --node-count 3 --availability total --nemesis partition
+./maelstrom test -w unique-ids --bin ~/dist-sys/target/debug/unique-ids --time-limit 30 --rate 1000 --node-count 3 --availability total --nemesis partition
 ```
