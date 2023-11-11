@@ -25,22 +25,12 @@ pub struct Payload<Body>{
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InitRequest {
-    #[serde(rename = "type")]
-    pub typ: String,
-    pub node_id: String,
-    pub node_ids: Vec<String>
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InitResponse {
-    #[serde(rename = "type")]
-    pub typ: InitPayload,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum InitPayload {
-    Init(InitRequest),
+    Init{
+        node_id: String,
+        node_ids: Vec<String>
+    },
     InitOk
 }
