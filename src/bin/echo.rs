@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()>{
                     body: Payload { 
                         msg_id: Some(sys_node.id),
                         in_reply_to: request.body.msg_id, 
-                        body: EchoPayload::EchoOk { echo: echo}
+                        body: EchoPayload::EchoOk { echo: echo }
                     }
                 }
             }
