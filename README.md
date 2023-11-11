@@ -13,3 +13,12 @@ cd maelstrom
 
 ./maelstrom test -w echo --bin ~/dist-sys/target/debug/echo --node-count 1 --time-limit 10
 ```
+
+# Test UUID Generation
+
+```bash
+
+cd maelstrom
+
+./maelstrom test -w unique-ids --bin --bin ~/dist-sys/target/debug/unique-ids --time-limit 30 --rate 1000 --node-count 3 --availability total --nemesis partition
+```
