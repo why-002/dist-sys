@@ -53,3 +53,11 @@ cd maelstrom
 
 ./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 25 --time-limit 20 --rate 100 --latency 100
 ```
+
+3e - Efficent Broadcast Part 2
+```bash
+
+cd maelstrom
+
+./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast_e --node-count 25 --time-limit 20 --rate 100 --latency 100
+```
