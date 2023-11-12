@@ -106,6 +106,7 @@ fn main() -> anyhow::Result<()>{
             let id = s_node.id;
             s_node.id += 1;
             drop(s_node);
+            // for efficency, you should turn this iter into a map, and then grab io to print
             for n in neighbors.iter() {
                 let gossip_message = Message {
                     src: String::to_owned(&name),
@@ -116,6 +117,7 @@ fn main() -> anyhow::Result<()>{
                         body: BroadcastPayload::Gossip { messages: messages.clone().into_iter().filter(|x| !known.get(n).unwrap().contains(x)).collect() } 
                     }
                 };
+
                 let mut stdout = io::stdout().lock();
                 serde_json::to_writer(&mut stdout, &gossip_message);
                 stdout.write_all(b"\n").context("newline");
