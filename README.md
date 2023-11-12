@@ -29,3 +29,27 @@ cd maelstrom
 
 ./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 1 --time-limit 20 --rate 100
 ```
+
+3b - Multi-node with gossip
+```bash
+
+cd maelstrom
+
+./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10
+```
+
+3c - Multi-node with partition
+```bash
+
+cd maelstrom
+
+./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10 --nemesis partition
+```
+
+3d - Efficent Broadcast Part 1
+```bash
+
+cd maelstrom
+
+./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 25 --time-limit 20 --rate 100 --latency 100
+```
