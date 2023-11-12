@@ -29,3 +29,11 @@ cd maelstrom
 
 ./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 1 --time-limit 20 --rate 100
 ```
+
+3b - Multi-node with gossip
+```bash
+
+cd maelstrom
+
+./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10
+```
