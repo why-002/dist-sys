@@ -1,10 +1,11 @@
 use dist_sys::*;
 use anyhow::Context;
-use std::collections::HashMap;
-use std::{io, error};
+use std::collections::{HashMap, HashSet};
+use std::{io, error, thread::{*,self}};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{time, vec};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -21,13 +22,20 @@ pub enum BroadcastPayload {
     Topology{
         topology: HashMap<String, Vec<String>>
     },
-    TopologyOk
+    TopologyOk,
+    Gossip{
+        messages: Vec<u32>
+    },
+    GossipOk{
+        messages: Vec<u32>
+    }
 }
 
 struct BroadcastNode{
     name: String,
     id: u32,
-    messages: Vec<u32>
+    messages: HashSet<u32>,
+    neighbors: Vec<String>
 }
 
 
@@ -55,12 +63,14 @@ fn main() -> anyhow::Result<()>{
 
     let serialized = serde_json::to_writer(&mut stdout, &init_response).context("serialize response message");
     stdout.write_all(b"\n").context("trailing newline");
+    drop(stdout);
 
 
     let mut sys_node = BroadcastNode {
         name: String::new(),
         id: 0,
-        messages: Vec::new()
+        messages: HashSet::new(),
+        neighbors: Vec::new()
     };
 
     match init_msg.body.body {
@@ -73,7 +83,42 @@ fn main() -> anyhow::Result<()>{
 
     sys_node.id += 1;
     let node = Arc::new(Mutex::new(sys_node));
+    let node_ref = Arc::clone(&node);
+    let should_end = Arc::new(Mutex::new(false));
+    let should_end_ref = Arc::clone(&should_end);
 
+    let handle = thread::spawn(move || {
+        let s_node_ref = Arc::clone(&node_ref);
+        let s_node = s_node_ref.lock().unwrap();
+        let name = String::to_owned(&s_node.name);
+        drop(s_node);
+        loop{
+            sleep(time::Duration::from_millis(50));
+            let s_node = s_node_ref.lock().unwrap();
+            let messages = HashSet::to_owned(&s_node.messages);
+            let neighbors = Vec::to_owned(&s_node.neighbors);
+            drop(s_node);
+            for n in neighbors.iter() {
+                let gossip_message = Message {
+                    src: String::to_owned(&name),
+                    dest: n.to_string(),
+                    body: Payload { 
+                        msg_id: None, 
+                        in_reply_to: None, 
+                        body: BroadcastPayload::Gossip { messages: messages.clone().into_iter().collect() } 
+                    }
+                };
+                let mut stdout = io::stdout().lock();
+                serde_json::to_writer(&mut stdout, &gossip_message);
+                stdout.write_all(b"\n").context("newline");
+            }
+            let should_end = Arc::clone(&should_end_ref);
+            let end = should_end.lock().unwrap();
+            if *end {
+                break;
+            }
+        }
+    });
 
     for line in stdin {
         let line = line.context("stdin read failed");
@@ -83,10 +128,10 @@ fn main() -> anyhow::Result<()>{
         let node_access = Arc::clone(&node);
         let mut s_node = node_access.lock().unwrap();
 
-        let response = match request.body.body {
+        match request.body.body {
             BroadcastPayload::Broadcast { message } => {
-                s_node.messages.push(message);
-                Message {
+                s_node.messages.insert(message);
+                let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
@@ -94,21 +139,32 @@ fn main() -> anyhow::Result<()>{
                         in_reply_to: request.body.msg_id,
                         body: BroadcastPayload::BroadcastOk
                     }
-                }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                let mut stdout = io::stdout().lock();
+                serde_json::to_writer(&mut stdout, &response);
+                stdout.write_all(b"\n").context("newline");
             }
             BroadcastPayload::Read => {
-                Message {
+                let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
                         msg_id: Some(s_node.id),
                         in_reply_to: request.body.msg_id,
-                        body: BroadcastPayload::ReadOk { messages: Vec::to_owned(&s_node.messages) }
+                        body: BroadcastPayload::ReadOk { messages: s_node.messages.clone().into_iter().collect() }
                     }
-                }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                let mut stdout = io::stdout().lock();
+                serde_json::to_writer(&mut stdout, &response);
+                stdout.write_all(b"\n").context("newline");
             }
             BroadcastPayload::Topology { topology } => {
-                Message {
+                s_node.neighbors = Vec::to_owned(topology.get(&s_node.name).unwrap());
+                let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
@@ -116,15 +172,42 @@ fn main() -> anyhow::Result<()>{
                         in_reply_to: request.body.msg_id,
                         body: BroadcastPayload::TopologyOk
                     }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                let mut stdout = io::stdout().lock();
+                serde_json::to_writer(&mut stdout, &response);
+                stdout.write_all(b"\n").context("newline");
+            }
+            BroadcastPayload::Gossip { messages } => {
+                for m in messages.iter(){
+                    s_node.messages.insert(*m);
+                }
+                let response = Message{
+                    src: request.dest,
+                    dest: request.src,
+                    body: Payload {
+                        msg_id: None,
+                        in_reply_to: None,
+                        body: BroadcastPayload::GossipOk { messages: s_node.messages.clone().into_iter().collect() }
+                    }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                let mut stdout = io::stdout().lock();
+                serde_json::to_writer(&mut stdout, &response);
+                stdout.write_all(b"\n").context("newline");
+            }
+            BroadcastPayload::GossipOk { messages } => {
+                for m in messages.iter(){
+                    s_node.messages.insert(*m);
                 }
             }
             _ => panic!()
         };
-
-        s_node.id += 1;
-        serde_json::to_writer(&mut stdout, &response);
-        stdout.write_all(b"\n").context("newline");
-
     }
+    let mut end = should_end.lock().unwrap();
+    *end = true;
+    handle.join();
     Ok(())
 }
