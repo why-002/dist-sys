@@ -6,7 +6,6 @@ This is currently the only project I have ever written in Rust, so this has been
 This also has been a great opportunity to take things I have learned in class like monads and expand it with other important programming concepts like mutexes, arcs, and closures.
 
 # Test Echo
-
 ```bash
 
 cd maelstrom
@@ -15,10 +14,18 @@ cd maelstrom
 ```
 
 # Test UUID Generation
-
 ```bash
 
 cd maelstrom
 
 ./maelstrom test -w unique-ids --bin ~/dist-sys/target/debug/unique-id --time-limit 30 --rate 1000 --node-count 3 --availability total --nemesis partition
+```
+
+# Test Broadcast
+3a - Single Node
+```bash
+
+cd maelstrom
+
+./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast --node-count 1 --time-limit 20 --rate 100
 ```
