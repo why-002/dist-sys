@@ -61,3 +61,11 @@ cd maelstrom
 
 ./maelstrom test -w broadcast --bin ~/dist-sys/target/debug/broadcast_e --node-count 25 --time-limit 20 --rate 100 --latency 100
 ```
+
+# Test Counter
+```bash
+
+cd maelstrom
+
+./maelstrom test -w g-counter --bin ~/dist-sys/target/debug/counter --node-count 3 --rate 100 --time-limit 20 --nemesis partition
+```
