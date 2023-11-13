@@ -69,3 +69,8 @@ cd maelstrom
 
 ./maelstrom test -w g-counter --bin ~/dist-sys/target/debug/counter --node-count 3 --rate 100 --time-limit 20 --nemesis partition
 ```
+
+# To-do
+<ul>
+  <li>Impl a send function for struct Message</li> 
+</ul>
