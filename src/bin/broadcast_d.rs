@@ -17,17 +17,17 @@ pub enum BroadcastPayload {
     BroadcastOk,
     Read,
     ReadOk{
-        messages: Vec<u32>
+        messages: HashSet<u32>
     },
     Topology{
         topology: HashMap<String, Vec<String>>
     },
     TopologyOk,
     Gossip{
-        messages: Vec<u32>
+        messages: HashSet<u32>
     },
     GossipOk{
-        messages: Vec<u32>
+        messages: HashSet<u32>
     }
 }
 
@@ -35,7 +35,8 @@ struct BroadcastNode{
     name: String,
     id: u32,
     messages: HashSet<u32>,
-    neighbors: Vec<String>
+    neighbors: Vec<String>,
+    known: HashMap<String, HashSet<u32>>
 }
 
 
@@ -70,12 +71,16 @@ fn main() -> anyhow::Result<()>{
         name: String::new(),
         id: 0,
         messages: HashSet::new(),
-        neighbors: Vec::new()
+        neighbors: Vec::new(),
+        known: HashMap::new()
     };
 
     match init_msg.body.body {
         InitPayload::Init { node_id, node_ids } => {
             sys_node.name = node_id;
+            for node in node_ids.iter(){
+                sys_node.known.insert(node.clone(), HashSet::new());
+            }
         }
         InitPayload::InitOk => {}
     };
@@ -92,23 +97,30 @@ fn main() -> anyhow::Result<()>{
         let s_node = s_node_ref.lock().unwrap();
         let name = String::to_owned(&s_node.name);
         drop(s_node);
+        if name != "n0"{
+            return;
+        }
         loop{
-            sleep(time::Duration::from_millis(50));
-            let s_node = s_node_ref.lock().unwrap();
+            sleep(time::Duration::from_millis(100));
+            let mut s_node = s_node_ref.lock().unwrap();
             let messages = HashSet::to_owned(&s_node.messages);
             let neighbors = Vec::to_owned(&s_node.neighbors);
+            let known = s_node.known.clone();
+            let id = s_node.id;
+            s_node.id += 1;
             drop(s_node);
+            // for efficency, you should turn this iter into a map, and then grab io to print
             for n in neighbors.iter() {
                 let gossip_message = Message {
                     src: String::to_owned(&name),
                     dest: n.to_string(),
                     body: Payload { 
-                        msg_id: None, 
+                        msg_id: Some(id),
                         in_reply_to: None, 
-                        // could add to all that they send out approx 10-20% of the values that it already knows that the receiver knows, that way responses are more sparse
-                        body: BroadcastPayload::Gossip { messages: messages.clone().into_iter().collect() } 
+                        body: BroadcastPayload::Gossip { messages: messages.clone().into_iter().filter(|x| !known.get(n).unwrap().contains(x)).collect() } 
                     }
                 };
+
                 let mut stdout = io::stdout().lock();
                 serde_json::to_writer(&mut stdout, &gossip_message);
                 stdout.write_all(b"\n").context("newline");
@@ -131,51 +143,66 @@ fn main() -> anyhow::Result<()>{
 
         match request.body.body {
             BroadcastPayload::Broadcast { message } => {
+                let id = s_node.id;
                 s_node.messages.insert(message);
+                s_node.id += 1;
+                drop(s_node);
+
                 let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
-                        msg_id: Some(s_node.id),
+                        msg_id: Some(id),
                         in_reply_to: request.body.msg_id,
                         body: BroadcastPayload::BroadcastOk
                     }
                 };
-                s_node.id += 1;
-                drop(s_node);
+
                 let mut stdout = io::stdout().lock();
                 serde_json::to_writer(&mut stdout, &response);
                 stdout.write_all(b"\n").context("newline");
             }
             BroadcastPayload::Read => {
+                let id = s_node.id;
+                s_node.id += 1;
+                let messages = s_node.messages.clone();
+                drop(s_node);
+                
                 let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
-                        msg_id: Some(s_node.id),
+                        msg_id: Some(id),
                         in_reply_to: request.body.msg_id,
-                        body: BroadcastPayload::ReadOk { messages: s_node.messages.clone().into_iter().collect() }
+                        body: BroadcastPayload::ReadOk { messages: messages }
                     }
                 };
-                s_node.id += 1;
-                drop(s_node);
+
                 let mut stdout = io::stdout().lock();
                 serde_json::to_writer(&mut stdout, &response);
                 stdout.write_all(b"\n").context("newline");
             }
             BroadcastPayload::Topology { topology } => {
-                s_node.neighbors = Vec::to_owned(topology.get(&s_node.name).unwrap());
+                if s_node.name == "n0"{
+                    s_node.neighbors = s_node.known.clone().into_keys().collect();
+                }
+                else{
+                    s_node.neighbors.push("n0".to_string());
+                }
+                let id = s_node.id;
+                s_node.id += 1;
+                drop(s_node);
+
                 let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
-                        msg_id: Some(s_node.id),
+                        msg_id: Some(id),
                         in_reply_to: request.body.msg_id,
                         body: BroadcastPayload::TopologyOk
                     }
                 };
-                s_node.id += 1;
-                drop(s_node);
+
                 let mut stdout = io::stdout().lock();
                 serde_json::to_writer(&mut stdout, &response);
                 stdout.write_all(b"\n").context("newline");
@@ -183,18 +210,23 @@ fn main() -> anyhow::Result<()>{
             BroadcastPayload::Gossip { messages } => {
                 for m in messages.iter(){
                     s_node.messages.insert(*m);
+                    s_node.known.get_mut(&request.src).unwrap().insert(*m);
                 }
+                let id = s_node.id;
+                s_node.id += 1;
+                let messages = s_node.messages.clone().into_iter().filter(|x| !s_node.known.get(&request.src).unwrap().contains(x)).collect();
+                drop(s_node);
+
                 let response = Message{
                     src: request.dest,
-                    dest: request.src,
+                    dest: request.src.clone(),
                     body: Payload {
-                        msg_id: None,
-                        in_reply_to: None,
-                        body: BroadcastPayload::GossipOk { messages: s_node.messages.clone().into_iter().collect() }
+                        msg_id: Some(id),
+                        in_reply_to: request.body.msg_id,
+                        body: BroadcastPayload::GossipOk { messages: messages }
                     }
                 };
-                s_node.id += 1;
-                drop(s_node);
+
                 let mut stdout = io::stdout().lock();
                 serde_json::to_writer(&mut stdout, &response);
                 stdout.write_all(b"\n").context("newline");
@@ -202,6 +234,7 @@ fn main() -> anyhow::Result<()>{
             BroadcastPayload::GossipOk { messages } => {
                 for m in messages.iter(){
                     s_node.messages.insert(*m);
+                    s_node.known.get_mut(&request.src).unwrap().insert(*m);
                 }
             }
             _ => panic!()
