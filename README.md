@@ -73,4 +73,5 @@ cd maelstrom
 # To-do
 <ul>
   <li>Impl a send function for struct Message</li> 
+  <li>For 3, store gossip requests, and then mark as read when the receiving the GossipOk response</li></li> 
 </ul>
