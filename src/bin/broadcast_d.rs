@@ -43,7 +43,6 @@ struct BroadcastNode{
 fn main() -> anyhow::Result<()>{
     let stdin = io::stdin().lock();
     let mut stdin = stdin.lines();
-    let mut stdout = io::stdout().lock();
     let init_msg: Message<InitPayload> = serde_json::from_str(
         &stdin
             .next()
@@ -62,9 +61,7 @@ fn main() -> anyhow::Result<()>{
         }
     };
 
-    let serialized = serde_json::to_writer(&mut stdout, &init_response).context("serialize response message");
-    stdout.write_all(b"\n").context("trailing newline");
-    drop(stdout);
+    init_response.send_stdout();
 
 
     let mut sys_node = BroadcastNode {
@@ -121,9 +118,7 @@ fn main() -> anyhow::Result<()>{
                     }
                 };
 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &gossip_message);
-                stdout.write_all(b"\n").context("newline");
+                gossip_message.send_stdout();
             }
             let should_end = Arc::clone(&should_end_ref);
             let end = should_end.lock().unwrap();
@@ -158,9 +153,7 @@ fn main() -> anyhow::Result<()>{
                     }
                 };
 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &response);
-                stdout.write_all(b"\n").context("newline");
+                response.send_stdout();
             }
             BroadcastPayload::Read => {
                 let id = s_node.id;
@@ -178,9 +171,7 @@ fn main() -> anyhow::Result<()>{
                     }
                 };
 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &response);
-                stdout.write_all(b"\n").context("newline");
+                response.send_stdout();
             }
             BroadcastPayload::Topology { topology } => {
                 if s_node.name == "n0"{
@@ -203,9 +194,7 @@ fn main() -> anyhow::Result<()>{
                     }
                 };
 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &response);
-                stdout.write_all(b"\n").context("newline");
+                response.send_stdout();
             }
             BroadcastPayload::Gossip { messages } => {
                 for m in messages.iter(){
@@ -227,9 +216,7 @@ fn main() -> anyhow::Result<()>{
                     }
                 };
 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &response);
-                stdout.write_all(b"\n").context("newline");
+                response.send_stdout();
             }
             BroadcastPayload::GossipOk { messages } => {
                 for m in messages.iter(){

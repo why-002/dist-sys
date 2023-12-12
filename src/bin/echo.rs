@@ -20,7 +20,6 @@ pub enum EchoPayload {
 fn main() -> anyhow::Result<()>{
     let stdin = io::stdin().lock();
     let mut stdin = stdin.lines();
-    let mut stdout = io::stdout().lock();
     let init_msg: Message<InitPayload> = serde_json::from_str(
         &stdin
             .next()
@@ -51,8 +50,9 @@ fn main() -> anyhow::Result<()>{
         }
     };
     sys_node.id += 1;
-    let serialized = serde_json::to_writer(&mut stdout, &init_response).context("serialize response message");
-    stdout.write_all(b"\n").context("trailing newline");
+    init_response.send_stdout();
+
+
     for line in stdin {
         let line = line.context("stdin read failed");
         let request: Message<EchoPayload>  = serde_json::from_str(
@@ -73,8 +73,7 @@ fn main() -> anyhow::Result<()>{
                 EchoPayload::EchoOk { echo } => panic!()
         };
         sys_node.id += 1;
-        serde_json::to_writer(&mut stdout, &response);
-        stdout.write_all(b"\n").context("newline");
+        response.send_stdout();
     }
     Ok(())
 }

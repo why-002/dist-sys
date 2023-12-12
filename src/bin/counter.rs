@@ -38,7 +38,6 @@ struct GrowNode{
 fn main() -> anyhow::Result<()>{
     let stdin = io::stdin().lock();
     let mut stdin = stdin.lines();
-    let mut stdout = io::stdout().lock();
     let init_msg: Message<InitPayload> = serde_json::from_str(
         &stdin
             .next()
@@ -75,9 +74,7 @@ fn main() -> anyhow::Result<()>{
         }
     };
     sys_node.id += 1;
-    let serialized = serde_json::to_writer(&mut stdout, &init_response).context("serialize response message");
-    stdout.write_all(b"\n").context("trailing newline");
-    drop(stdout);
+    init_response.send_stdout().expect("failed to send init response");
 
 
 
@@ -112,10 +109,7 @@ fn main() -> anyhow::Result<()>{
                         }
                     };
     
-                    let mut stdout = io::stdout().lock();
-                    serde_json::to_writer(&mut stdout, &gossip_message);
-                    stdout.write_all(b"\n").context("newline");
-                    eprintln!("gossiped")
+                    gossip_message.send_stdout().expect("Failed to send gossip message");
                 }
                 
             }
@@ -156,9 +150,7 @@ fn main() -> anyhow::Result<()>{
                     } 
                 };
 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &response);
-                stdout.write_all(b"\n").context("newline");
+                response.send_stdout();
             }
             GrowPayload::Read => {
                 let mut total: u32 = s_node.cache.clone().values().into_iter().sum();
@@ -176,10 +168,7 @@ fn main() -> anyhow::Result<()>{
                     } 
                 };
                 
-                let mut stdout = io::stdout().lock();
-                serde_json::to_writer(&mut stdout, &response);
-                stdout.write_all(b"\n").context("newline");
-
+                response.send_stdout();
             }
             GrowPayload::Gossip { value } => {
                 s_node.cache.insert(request.src, value);

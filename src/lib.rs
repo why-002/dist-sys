@@ -1,6 +1,6 @@
 use anyhow::Context;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{io::{BufRead, StdoutLock, Write}, string};
+use std::{io::{BufRead, StdoutLock, Write, self}, string, any};
 
 pub struct Node {
     pub name: String,
@@ -33,4 +33,20 @@ pub enum InitPayload {
         node_ids: Vec<String>
     },
     InitOk
+}
+
+impl <Payload> Message<Payload>{
+    pub fn send(&self, output: &mut impl Write) -> anyhow::Result<()>
+        where Payload: Serialize, {
+
+            serde_json::to_writer(&mut *output, &self);
+            output.write_all(b"\n");
+            Ok(())
+        }
+    pub fn send_stdout(&self) -> anyhow::Result<()>
+        where Payload: Serialize, {
+            let mut output = io::stdout().lock();
+            self.send(&mut output);
+            Ok(())
+        }
 }

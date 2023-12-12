@@ -1,3 +1,4 @@
+// have everyone create GUIDs https://docs.rs/chrono/latest/chrono/struct.DateTime.html#method.timestamp
 use dist_sys::*;
 use anyhow::Context;
 use std::collections::{HashMap, HashSet};
@@ -10,32 +11,42 @@ use std::{time, vec};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-pub enum BroadcastPayload {
-    Broadcast{
-        message: u32
+pub enum KafkaPayload {
+    Send{
+        key: String,
+        msg: u32
     },
-    BroadcastOk,
-    Read,
-    ReadOk{
-        messages: Vec<u32>
+    SendOk{
+        offset: u32
     },
-    Topology{
-        topology: HashMap<String, Vec<String>>
+    Poll{
+        offsets: HashMap<String, u32>
     },
-    TopologyOk,
-    Gossip{
-        messages: Vec<u32>
+    PollOk{
+        msgs: HashMap<String, Vec<(u32,u32)>>
     },
-    GossipOk{
-        messages: Vec<u32>
-    }
-}
+    CommitOffsets{
+        offsets: HashMap<String, u32>
+    },
+    CommitOffsetsOk,
+    ListCommittedOffsets{
+        keys: Vec<String>
+    },
+    ListCommittedOffsetsOk{
+        offsets: HashMap<String, u32>
+    },
+    Sync{
+        msg: u32,
+        offset: u32
+    },
+    SyncOk
+} //send messages to lin-kv to get/set id values
 
-struct BroadcastNode{
+struct KafkaNode{
     name: String,
     id: u32,
-    messages: HashSet<u32>,
-    neighbors: Vec<String>
+    messages: HashMap<String, Vec<(u32, u32)>>,
+    offsets: HashMap<String, u32>
 }
 
 
@@ -64,11 +75,11 @@ fn main() -> anyhow::Result<()>{
     init_response.send_stdout();
 
 
-    let mut sys_node = BroadcastNode {
+    let mut sys_node = KafkaNode {
         name: String::new(),
         id: 0,
-        messages: HashSet::new(),
-        neighbors: Vec::new()
+        messages: HashMap::new(),
+        offsets: HashMap::new()
     };
 
     match init_msg.body.body {
@@ -85,118 +96,100 @@ fn main() -> anyhow::Result<()>{
     let should_end = Arc::new(Mutex::new(false));
     let should_end_ref = Arc::clone(&should_end);
 
-    let handle = thread::spawn(move || {
-        let s_node_ref = Arc::clone(&node_ref);
-        let s_node = s_node_ref.lock().unwrap();
-        let name = String::to_owned(&s_node.name);
-        drop(s_node);
-        loop{
-            sleep(time::Duration::from_millis(50));
-            let s_node = s_node_ref.lock().unwrap();
-            let messages = HashSet::to_owned(&s_node.messages);
-            let neighbors = Vec::to_owned(&s_node.neighbors);
-            drop(s_node);
-            for n in neighbors.iter() {
-                let gossip_message = Message {
-                    src: String::to_owned(&name),
-                    dest: n.to_string(),
-                    body: Payload { 
-                        msg_id: None, 
-                        in_reply_to: None, 
-                        // could add to all that they send out approx 10-20% of the values that it already knows that the receiver knows, that way responses are more sparse
-                        body: BroadcastPayload::Gossip { messages: messages.clone().into_iter().collect() } 
-                    }
-                };
-                gossip_message.send_stdout();
-            }
-            let should_end = Arc::clone(&should_end_ref);
-            let end = should_end.lock().unwrap();
-            if *end {
-                break;
-            }
-        }
-    });
-
     for line in stdin {
         let line = line.context("stdin read failed");
-        let request: Message<BroadcastPayload>  = serde_json::from_str(
+        let request: Message<KafkaPayload>  = serde_json::from_str(
             &line.expect("")
         ).context("")?;
         let node_access = Arc::clone(&node);
         let mut s_node = node_access.lock().unwrap();
-
         match request.body.body {
-            BroadcastPayload::Broadcast { message } => {
-                s_node.messages.insert(message);
-                let response = Message {
-                    src: request.dest,
-                    dest: request.src,
-                    body: Payload {
-                        msg_id: Some(s_node.id),
-                        in_reply_to: request.body.msg_id,
-                        body: BroadcastPayload::BroadcastOk
-                    }
-                };
-                s_node.id += 1;
-                drop(s_node);
-                response.send_stdout();
-            }
-            BroadcastPayload::Read => {
-                let response = Message {
-                    src: request.dest,
-                    dest: request.src,
-                    body: Payload {
-                        msg_id: Some(s_node.id),
-                        in_reply_to: request.body.msg_id,
-                        body: BroadcastPayload::ReadOk { messages: s_node.messages.clone().into_iter().collect() }
-                    }
-                };
-                s_node.id += 1;
-                drop(s_node);
-                response.send_stdout();
-            }
-            BroadcastPayload::Topology { topology } => {
-                s_node.neighbors = Vec::to_owned(topology.get(&s_node.name).unwrap());
-                let response = Message {
-                    src: request.dest,
-                    dest: request.src,
-                    body: Payload {
-                        msg_id: Some(s_node.id),
-                        in_reply_to: request.body.msg_id,
-                        body: BroadcastPayload::TopologyOk
-                    }
-                };
-                s_node.id += 1;
-                drop(s_node);
-                response.send_stdout();
-            }
-            BroadcastPayload::Gossip { messages } => {
-                for m in messages.iter(){
-                    s_node.messages.insert(*m);
+            KafkaPayload::Send { key, msg } => {
+                let offset = s_node.id;
+                if !s_node.messages.contains_key(&key) {
+                    s_node.messages.insert(key.clone(), Vec::new());
                 }
-                let response = Message{
+                s_node.messages.get_mut(&key).unwrap().push((offset,msg));
+                let response = Message {
                     src: request.dest,
                     dest: request.src,
                     body: Payload {
-                        msg_id: None,
-                        in_reply_to: None,
-                        body: BroadcastPayload::GossipOk { messages: s_node.messages.clone().into_iter().collect() }
+                        msg_id: Some(s_node.id),
+                        in_reply_to: request.body.msg_id,
+                        body: KafkaPayload::SendOk { offset:  offset}
                     }
                 };
                 s_node.id += 1;
                 drop(s_node);
                 response.send_stdout();
             }
-            BroadcastPayload::GossipOk { messages } => {
-                for m in messages.iter(){
-                    s_node.messages.insert(*m);
+            KafkaPayload::Poll { offsets } => {
+                let mut msgs: HashMap<String, Vec<(u32,u32)>> = HashMap::new();
+                
+                msgs.extend(offsets.into_iter()
+                    .filter(|(key,_)|s_node.messages.contains_key(key))
+                    .map(|(key,offset)|{
+                    (key.clone(),s_node.messages.get(&key).unwrap().clone().into_iter()
+                        .filter(|x|{x.0 >= offset}).into_iter().collect())
+                }));
+
+                let response = Message {
+                    src: request.dest,
+                    dest: request.src,
+                    body: Payload {
+                        msg_id: Some(s_node.id),
+                        in_reply_to: request.body.msg_id,
+                        body: KafkaPayload::PollOk { msgs: msgs }
+                    }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                response.send_stdout();
+            }
+            KafkaPayload::CommitOffsets { offsets } => {
+                for (key,offset) in offsets {
+                    s_node.offsets.insert(key, offset);
                 }
+
+                let response = Message {
+                    src: request.dest,
+                    dest: request.src,
+                    body: Payload {
+                        msg_id: Some(s_node.id),
+                        in_reply_to: request.body.msg_id,
+                        body: KafkaPayload::CommitOffsetsOk
+                    }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                response.send_stdout();
+            }
+            KafkaPayload::ListCommittedOffsets { keys } => {
+                let mut committed_messages = HashMap::new();
+                for key in keys {
+                    if s_node.messages.contains_key(&key) && s_node.offsets.contains_key(&key)  {
+                        let committed = s_node.offsets.get(&key).unwrap();
+                        committed_messages.insert(key, *committed);
+                    }
+                }
+
+                let response = Message {
+                    src: request.dest,
+                    dest: request.src,
+                    body: Payload {
+                        msg_id: Some(s_node.id),
+                        in_reply_to: request.body.msg_id,
+                        body: KafkaPayload::ListCommittedOffsetsOk { offsets: committed_messages }
+                    }
+                };
+                s_node.id += 1;
+                drop(s_node);
+                response.send_stdout();
             }
             _ => panic!()
         };
     }
     let mut end = should_end.lock().unwrap();
     *end = true;
-    handle.join();
     Ok(())
 }
