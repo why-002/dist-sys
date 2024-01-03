@@ -70,6 +70,14 @@ cd maelstrom
 ./maelstrom test -w g-counter --bin ~/dist-sys/target/debug/counter --node-count 3 --rate 100 --time-limit 20 --nemesis partition
 ```
 
+# Kafka
+3a - Single Node
+```bash
+
+cd maelstrom
+
+./maelstrom test -w kafka --bin ~/dist-sys/target/debug/kafka --node-count 1 --concurrency 2n --time-limit 20 --rate 1000
+```
 # To-do
 <ul>
   <li>Impl a send function for struct Message</li> 
